@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<style>
+    video {
+        -moz-transform: scaleX(-1);
+        -o-transform: scaleX(-1);
+        -webkit-transform: scaleX(-1);
+        transform: scaleX(-1);
+        filter: FlipH;
+        -ms-filter: "FlipH";
+    }
+
+    video {
+        width: 300px;
+    }
+</style>
+
+<body>
+    <button>rec</button>
+    <video autoplay muted>
+
+    </video>
+    <div id="output"
+        style="display: inline-block; top: 4px; position: relative ;border: dotted 1px #ccc; padding: 2px;">
+    </div>
+    <video id="incoming" autoplay></video>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.0/socket.io.min.js"></script>
+    <script>
+        let socket = io.connect('https://videochat21.herokuapp.com/')
+        let working = false;
+        socket.on('connection', (socket) => {
+            console.log('a user connected');
+            console.log(socket)
+
+        });
+        socket.on('disconnect', () => {
+            console.log('user disconnected');
+            mediaSource.endOfStream()
+        });
+
+        const incomingVid = document.querySelector("#incoming");
+        const mediaSource = new MediaSource()
+        const mimeCodec = 'video/webm;codecs=vp8,opus'
+
+        if ('MediaSource' in window && MediaSource.isTypeSupported(mimeCodec)) {
+            console.log(mediaSource.readyState); // closed
+            incomingVid.src = URL.createObjectURL(mediaSource);
+            mediaSource.addEventListener('sourceopen', sourceOpen);
+        } else {
+            console.error('Unsupported MIME type or codec: ', mimeCodec);
+        }
+
+        function sourceOpen() {
+            var sourceBuffer = mediaSource.addSourceBuffer(mimeCodec)
+            console.log(this.readyState)
+            socket.on('c', (chunk) => {
+                // console.log(chunk)
+                // console.log(chunk, mimeType)
+                if (!sourceBuffer.updating) {
+                    sourceBuffer.appendBuffer((chunk));
+                }
+                sourceBuffer.addEventListener('updateend', () => {
+                    // mediaSource.endOfStream()
+
+                    incomingVid.play()
+                    console.log(mediaSource.readyState); // ended
+                });
+            })
+        }
+    </script>
+    <script>
+        if (navigator.mediaDevices) {
+            console.log('getUserMedia supported.');
+
+            const constraints = {
+                audio: true,
+                video: true,
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then((stream) => {
+                    const mediaRecorder = new MediaRecorder(stream, {
+                        mimeType: 'video/webm; codecs="opus,vp8"'
+                    });
+                    const record = document.querySelector("button");
+                    const video = document.querySelector('video');
+                    video.srcObject = stream
+
+                    record.onclick = () => {
+                        mediaRecorder.start(500);
+                        console.log(mediaRecorder.state);
+                        console.log("recorder started");
+                        record.style.background = "red";
+                        record.style.color = "black";
+                    }
+
+                    stop.onclick = () => {
+                        mediaRecorder.stop();
+                        console.log(mediaRecorder.state);
+                        console.log("recorder stopped");
+                        record.style.background = "";
+                        record.style.color = "";
+                    }
+
+                    mediaRecorder.ondataavailable = (e) => {
+                        socket.emit('chunk', (e.data));
+                    }
+                })
+                .catch((err) => {
+                    console.error(`The following error occurred: ${err}`);
+                })
+        }
+    </script>
+</body>
+
+</html>
